@@ -8,9 +8,36 @@ const app = express()
 const port = process.env.PORT || 5000
 
 // middleware
-app.use(cors());
-app.use(express.json());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
 
+    ],
+    credentials: true,
+  })
+);
+app.use(express.json());
+app.use(cookieParser());
+
+const tokenVerify = async (req, res, next) => {
+  const token = req.cookies?.token;
+  // console.log('Token verifying', token);
+
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized - Token missing" });
+  }
+
+  jwt.verify(token, process.env.SECRET, (err, decoded) => {
+    if (err) {
+      console.error("Token verification error:", err);
+      return res.status(401).json({ message: "Unauthorized - Token invalid" });
+    }
+    req.user = decoded;
+    console.log("Token verification successful");
+    next();
+  });
+};
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ctrkbrk.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
@@ -92,6 +119,24 @@ async function run() {
           res.send(result);
         })
 
+        // admin api
+        // jwt api
+        app.post("/jwt", async (req, res) => {
+          const user = req.body;
+          console.log("user from body", user);
+    
+          const token = jwt.sign(user, process.env.SECRET, { expiresIn: "1h" });
+    
+          res
+          .cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', 
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+    
+        })
+          res.send({ success: true });
+        });
+    
        
   } finally {
   }
