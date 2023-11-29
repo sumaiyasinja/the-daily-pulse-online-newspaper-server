@@ -31,7 +31,17 @@ const verifyToken = (req, res, next) => {
   })
 }
 
-
+// use verify admin after verifyToken
+const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded.email;
+  const query = { email: email };
+  const user = await userCollection.findOne(query);
+  const isAdmin = user?.role === 'admin';
+  if (!isAdmin) {
+    return res.status(403).send({ message: 'forbidden access' });
+  }
+  next();
+}
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ctrkbrk.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
@@ -116,22 +126,22 @@ async function run() {
     });
 
     // publisher api
-    app.post("/publisher", async(req, res) => {
+    app.post("/publishers", async(req, res) => {
       const user = req.body;
       const result =await publisherCollection.insertOne(user);
       res.send(result);
     });
-    app.get("/publisher/:id", async(req, res) => {
+    app.get("/publishers/:id", async(req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result =await publisherCollection.findOne(query);
       res.send(result);
     });
-    app.get("/publisher", async(req, res) => {
+    app.get("/publishers", async(req, res) => {
       const result = await publisherCollection.find();
       res.send(result);
     });
-    app.delete("/publisher/:id", async(req, res) => {
+    app.delete("/publishers/:id", async(req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await publisherCollection.deleteOne(query);
