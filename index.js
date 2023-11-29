@@ -56,7 +56,7 @@ async function run() {
 
     const articlesCollection = client.db("theDailyPulseNews").collection("articles");
     const userCollection = client.db("theDailyPulseNews").collection("users");
-    const adminCollection = client.db("theDailyPulseNews").collection("admin");
+    const publisherCollection = client.db("theDailyPulseNews").collection("publishers");
     // artciles api
     app.post('/articles', (req, res) => {
       const article = req.body;
@@ -119,7 +119,28 @@ async function run() {
           res.send(result);
         })
 
-        // admin api
+        // publisher api
+        app.post('/publisher', (req, res) => {
+          const user = req.body;
+          const result = publisherCollection.insertOne(user);
+          res.send(result);
+        })
+        app.get('/publisher/:id', (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = publisherCollection.findOne(query);
+          res.send(result);
+        })
+        app.get('/publisher', (req, res) => {
+          const result = publisherCollection.find();
+          res.send(result);
+        })
+        app.delete('/publisher/:id', (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = publisherCollection.deleteOne(query);
+          res.send(result);
+        })
         // jwt api
         app.post("/jwt", async (req, res) => {
           const user = req.body;
