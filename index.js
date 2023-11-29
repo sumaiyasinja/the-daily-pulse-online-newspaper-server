@@ -66,6 +66,32 @@ async function run() {
       res.send(result);
     })
 
+        // user api
+        app.post('/users', (req, res) => {
+          const user = req.body;
+          const result = userCollection.insertOne(user);
+          res.send(result);
+        })
+        app.get('/users/:id', (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          // todo: add jwt validation
+          const result = userCollection.findOne(query);
+          res.send(result);
+        })
+        app.put('/users/:id', (req, res) => {
+          const id = req.params.id;
+          const user = req.body;
+          const filter = { _id: new ObjectId(id) };
+          const options = { upsert: true };
+          // todo: add validation, set feilds data individually
+          const updateDoc = {
+            $set: user,
+          }
+          const result = userCollection.updateOne(filter, updateDoc, options);
+          res.send(result);
+        })
+
        
   } finally {
   }
