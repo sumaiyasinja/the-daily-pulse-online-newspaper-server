@@ -6,6 +6,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 
 // middleware
 app.use(
@@ -35,13 +37,11 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
     // database collections
-    const articlesCollection = client
-      .db("theDailyPulseNews")
-      .collection("articles");
+    const articlesCollection = client.db("theDailyPulseNews").collection("articles");
     const userCollection = client.db("theDailyPulseNews").collection("users");
-    const publisherCollection = client
-      .db("theDailyPulseNews")
-      .collection("publishers");
+    const publisherCollection = client.db("theDailyPulseNews").collection("publishers");
+    const paymentCollection = client.db("theDailyPulseNews").collection("payments");
+
 
     // middlewares
     const verifyToken = (req, res, next) => {
@@ -80,26 +80,9 @@ async function run() {
       }
       next();
     };
-     // payment intent
-app.post('/create-payment-intent', async (req, res) => {
-  const { price } = req.body;
-  const amount = parseInt(price * 100);
-  console.log(amount, 'amount inside the intent');
-
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: amount,
-    currency: 'usd',
-    payment_method_types: ['card'],
-  });
-
-  res.send({
-    clientSecret: paymentIntent.client_secret,
-  });
-});
-
+ 
 
     // artciles api
-    // get all articles
     app.get("/articles", verifyToken, verifyAdmin,async (req, res) => {
       try {
         const result = await articlesCollection.find().toArray();
@@ -111,14 +94,14 @@ app.post('/create-payment-intent', async (req, res) => {
           .send({ success: false, message: "Internal server error" });
       }
     });
-    app.get("/article-deatials/:id", async (req, res) => {
+    app.get("/article-deatials/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       console.log("prob",id);
       const query = { _id: new ObjectId(id) };
       const result = await articlesCollection.findOne(query);
       res.send(result);
     });
-    app.post("/articles", async (req, res) => {
+    app.post("/articles",verifyToken, async (req, res) => {
       try {
         const article = req.body;
         const result = await articlesCollection.insertOne(article);
@@ -131,7 +114,7 @@ app.post('/create-payment-intent', async (req, res) => {
       }
     });
 
-    app.get("/premium-articles", async (req, res) => {
+    app.get("/premium-articles",verifyToken, verifyPremium, async (req, res) => {
       try {
         const result = await articlesCollection
           .find({ status: "approved", isPremium: "true" })
@@ -177,9 +160,35 @@ app.post('/create-payment-intent', async (req, res) => {
         });
       }
     });
+    app.get('/articles-by-catagory', verifyToken, async (req, res) => {
+      try {
+        const publisher = req.query.publisher;
+        const tags = req.query.tags;
 
-    app.put(
-      "/articles/change-status-decline/:id",
+        const query = {};
+
+        if (publisher) {
+          query.publisher = publisher;
+        }
+
+        if (tags) {
+          query.tags = { $in: tags.split(',') }; 
+        }
+
+        const articles = await articlesCollection.find(query).toArray();
+
+        res.send(articles);
+
+      } catch (error) {
+        console.error("Error fetching articles:", error);
+        res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: error.message,
+        });
+      }
+    });
+    app.put("/articles/change-status-decline/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
@@ -201,8 +210,7 @@ app.post('/create-payment-intent', async (req, res) => {
         res.send(result);
       }
     );
-    app.put(
-      "/articles/change-status-approve/:id",
+    app.put("/articles/change-status-approve/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
@@ -223,8 +231,7 @@ app.post('/create-payment-intent', async (req, res) => {
         res.send(result);
       }
     );
-    app.put(
-      "/articles/make-premium/:id",
+    app.put("/articles/make-premium/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
@@ -326,7 +333,7 @@ app.post('/create-payment-intent', async (req, res) => {
       const result = await userCollection.findOne(query);
       res.send(result);
     });
-    app.put("/users/update-role/:id", async (req, res) => {
+    app.put("/users/update-role/:id",verifyToken,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
@@ -339,7 +346,7 @@ app.post('/create-payment-intent', async (req, res) => {
       res.send(result);
     });
 
-    app.put(`/users/update/:email`, async (req, res) => {
+    app.put(`/users/update/:email`,verifyToken, async (req, res) => {
       const userEmail = req.params.email;
       const user = req.body;
       console.log("Received request:", req.body);
@@ -368,8 +375,7 @@ app.post('/create-payment-intent', async (req, res) => {
       }
     });
 
-    app.get(
-      "/users/admin/:email",
+    app.get( "/users/admin/:email",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
@@ -389,8 +395,7 @@ app.post('/create-payment-intent', async (req, res) => {
       }
     );
 
-    app.patch(
-      "/users/admin/:id",
+    app.patch("/users/admin/:id",
       verifyToken,
       verifyAdmin,
       async (req, res) => {
@@ -428,7 +433,6 @@ app.post('/create-payment-intent', async (req, res) => {
       const result = await publisherCollection.deleteOne(query);
       res.send(result);
     });
-    // jwt api
     // jwt related api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -440,6 +444,57 @@ app.post('/create-payment-intent', async (req, res) => {
       res.clearCookie("token");
       res.send({ success: true });
     });
+
+    // payment api
+    app.post('/create-payment-intent', async (req, res) => {
+      const price = req.body.price;
+      console.log('Received price:', price);
+      const amount = parseInt(price)* 100;
+      console.log(amount);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    });
+
+
+    app.get('/payments/:email', verifyToken, async (req, res) => {
+      const query = { email: req.params.email }
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    })
+
+    app.post('/payments', async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCollection.insertOne(payment);
+
+      //  carefully delete each item from the cart
+      console.log('payment info', payment);
+      // const query = {
+      //   _id: {
+      //     $in: payment.cartIds.map(id => new ObjectId(id))
+      //   }
+      // };
+
+      // const deleteResult = await cartCollection.deleteMany(query);
+      // const userPremium = await userCollection.find(query);
+
+      res.send({ paymentResult });
+    })
+    
+
+
+
+  
   } finally {
   }
 }
